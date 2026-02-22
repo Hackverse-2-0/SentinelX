@@ -1,0 +1,18 @@
+# ==========================================
+# SECURITY: Never commit secrets or env vars
+# ==========================================
+.env
+.env.*
+*.secret
+keys/
+credentials/
+
+# ==========================================
+# OS Generated Files (Clutter)
+# ==========================================
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# TEAM: ADD YOUR SPECIFIC FRAMEWORK RULES BELOW
+# ==========================================
