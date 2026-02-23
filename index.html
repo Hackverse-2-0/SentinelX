@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EcoSentinel — IoT Environmental Monitor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div>
+      <div class="logo">🌿 Eco<span>Sentinel</span></div>
+      <div class="logo-sub">ENVIRONMENTAL IOT MONITORING PLATFORM v2.0.0</div>
+    </div>
+    <div class="status-bar">
+      <div class="pulse-dot" id="main-dot"></div>
+      <span id="main-status-text" class="status-text">DEMO MODE</span>
+      <span class="clock-display" id="clock"></span>
+    </div>
+    <div class="header-meta">
+      <div>DEVICE: <span class="accent-cyan" id="hdr-device">ECO-NODE (DEMO)</span></div>
+      <div>UPTIME: <span class="accent-green" id="uptime">00:00:00</span></div>
+      <div>LAST PKT: <span class="accent-yellow" id="hdr-lastpkt">--</span></div>
+    </div>
+  </header>
+
+  <!-- MQTT CONNECTION PANEL -->
+  <div class="conn-panel">
+    <div class="conn-panel-title">⚡ MQTT Device Connection</div>
+    <div class="conn-grid">
+      <div class="conn-field">
+        <label for="cfg-host">Broker Host</label>
+        <input id="cfg-host" type="text" value="broker.hivemq.com" placeholder="broker.hivemq.com" />
+      </div>
+      <div class="conn-field">
+        <label for="cfg-port">Port (WebSocket)</label>
+        <input id="cfg-port" type="number" value="8884" placeholder="8884" />
+      </div>
+      <div class="conn-field">
+        <label for="cfg-topic">Topic Prefix</label>
+        <input id="cfg-topic" type="text" value="ecosentinel/node1" placeholder="ecosentinel/node1" />
+      </div>
+      <div class="conn-field">
+        <label for="cfg-clientid">Client ID</label>
+        <input id="cfg-clientid" type="text" value="eco-dash-001" placeholder="eco-dash-001" />
+      </div>
+      <button class="btn btn-connect" onclick="mqttConnect()">CONNECT</button>
+      <button class="btn btn-demo"    onclick="startDemo()">DEMO MODE</button>
+    </div>
+
+    <div class="conn-status-row">
+      <span>STATUS:</span>
+      <span class="conn-badge badge-disconnected" id="conn-badge">DISCONNECTED</span>
+      <span id="conn-msg" class="conn-msg-text">Not connected. Enter broker details or use Demo Mode.</span>
+    </div>
+
+    <div id="conn-log">
+      <span class="log-info">▸ EcoSentinel v2.0.0 ready. Configure MQTT above or click DEMO MODE.</span>
+    </div>
+
+    <div class="topics-section">
+      <div class="topics-label">EXPECTED MQTT TOPICS FROM ESP32:</div>
+      <div class="topics-grid">
+        <div class="topic-item"><span class="topic-key">temp:     </span><span class="topic-val">{prefix}/temperature</span></div>
+        <div class="topic-item"><span class="topic-key">humidity: </span><span class="topic-val">{prefix}/humidity</span></div>
+        <div class="topic-item"><span class="topic-key">co2:      </span><span class="topic-val">{prefix}/co2</span></div>
+        <div class="topic-item"><span class="topic-key">moisture: </span><span class="topic-val">{prefix}/moisture</span></div>
+      </div>
+      <div class="topics-note">
+        📌 Payload: plain number <code>42.5</code> or JSON <code>{"value": 42.5}</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mode banner -->
+  <div class="mode-banner demo" id="mode-banner">
+    <span>●</span> DEMO MODE — Simulated data. Connect your ESP32 via MQTT to see live readings.
+  </div>
+
+  <!-- ═══════════════════════════════════
+       SENSOR STAT CARDS
+  ════════════════════════════════════ -->
+  <div class="section-row">
+    <div class="section-heading">// Sensor Readings</div>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="grid5">
+    <div class="card cyan">
+      <div class="card-label">// Temperature</div>
+      <div class="card-value cyan" id="temp-val">--.-</div>
+      <div class="card-unit">°C &nbsp;[ MAX: 75°C ]</div>
+      <div class="card-trend" id="temp-trend">—</div>
+      <div class="sparkline"><canvas id="spark-temp" height="36"></canvas></div>
+      <div class="last-seen" id="temp-age">—</div>
+    </div>
+    <div class="card green">
+      <div class="card-label">// Humidity</div>
+      <div class="card-value green" id="hum-val">--.-</div>
+      <div class="card-unit">%RH  [ RANGE: 30–70% ]</div>
+      <div class="card-trend" id="hum-trend">—</div>
+      <div class="sparkline"><canvas id="spark-hum" height="36"></canvas></div>
+      <div class="last-seen" id="hum-age">—</div>
+    </div>
+    <div class="card yellow">
+      <div class="card-label">// CO₂ / Gas</div>
+      <div class="card-value yellow" id="co2-val">----</div>
+      <div class="card-unit">ppm  [ SAFE: &lt;1000 ]</div>
+      <div class="card-trend" id="co2-trend">—</div>
+      <div class="sparkline"><canvas id="spark-co2" height="36"></canvas></div>
+      <div class="last-seen" id="co2-age">—</div>
+    </div>
+    <div class="card purple">
+      <div class="card-label">// Soil Moisture</div>
+      <div class="card-value purple" id="moist-val">--.-</div>
+      <div class="card-unit">%  [ IDEAL: 40–70% ]</div>
+      <div class="card-trend" id="moist-trend">—</div>
+      <div class="moisture-bar-bg"><div class="moisture-bar-fill" id="moist-bar"></div></div>
+      <div class="last-seen" id="moist-age">—</div>
+    </div>
+    <div class="card card-conn">
+      <div class="card-label">// Connection</div>
+      <div class="card-value-conn" id="conn-stat-val">DEMO</div>
+      <div class="card-unit" id="conn-stat-broker">Simulated Data</div>
+      <div class="conn-pkts-label">PKTS RECEIVED</div>
+      <div class="conn-pkts-val" id="pkt-count">0</div>
+      <div class="last-seen" id="conn-quality">Quality: --</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════
+       TIME-SERIES CHARTS
+  ════════════════════════════════════ -->
+  <div class="section-row">
+    <div class="section-heading">// Live Time Series</div>
+    <div class="section-line"></div>
+    <div class="chart-controls">
+      <label class="chart-ctrl-label">WINDOW:</label>
+      <select id="chart-window" onchange="setChartWindow(this.value)">
+        <option value="20">20 pts</option>
+        <option value="60" selected>60 pts</option>
+        <option value="120">120 pts</option>
+      </select>
+      <button class="btn-mini" onclick="clearHistory()">CLEAR</button>
+    </div>
+  </div>
+
+  <div class="grid-main">
+    <div class="card span2">
+      <div class="chart-title">Temperature &amp; Humidity <span id="chart-th-badge">LAST 60 READINGS</span></div>
+      <canvas id="chart-temp-hum" height="190"></canvas>
+    </div>
+    <div class="card">
+      <div class="chart-title">CO₂ &amp; Moisture <span>LIVE</span></div>
+      <canvas id="chart-co2-moist" height="190"></canvas>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════
+       DEVICE CONTROL PANEL  (NEW v2)
+  ════════════════════════════════════ -->
+  <div class="section-row">
+    <div class="section-heading">// Device Control</div>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="control-grid">
+
+    <!-- Buzzer Control -->
+    <div class="card ctrl-card">
+      <div class="card-label">// Buzzer</div>
+      <div class="ctrl-icon">🔔</div>
+      <div class="ctrl-status" id="buzzer-status">UNKNOWN</div>
+      <div class="ctrl-btn-row">
+        <button class="btn-ctrl btn-ctrl-green"  onclick="sendCmd('buzzer','beep')">BEEP</button>
+        <button class="btn-ctrl btn-ctrl-red"    onclick="sendCmd('buzzer','on')">ON</button>
+        <button class="btn-ctrl btn-ctrl-dim"    onclick="sendCmd('buzzer','off')">OFF</button>
+      </div>
+      <div class="ctrl-note">Sends to: {prefix}/cmd/buzzer</div>
+    </div>
+
+    <!-- Relay Control -->
+    <div class="card ctrl-card">
+      <div class="card-label">// Relay</div>
+      <div class="ctrl-icon">⚡</div>
+      <div class="ctrl-status" id="relay-status">UNKNOWN</div>
+      <div class="ctrl-btn-row">
+        <button class="btn-ctrl btn-ctrl-green" onclick="sendCmd('relay','on')">ON</button>
+        <button class="btn-ctrl btn-ctrl-red"   onclick="sendCmd('relay','off')">OFF</button>
+      </div>
+      <div class="ctrl-note">Sends to: {prefix}/cmd/relay</div>
+    </div>
+
+    <!-- Interval Control -->
+    <div class="card ctrl-card">
+      <div class="card-label">// Publish Rate</div>
+      <div class="ctrl-icon">⏱</div>
+      <div class="ctrl-status" id="interval-status">2000 ms</div>
+      <div class="ctrl-btn-row">
+        <button class="btn-ctrl btn-ctrl-green" onclick="sendIntervalCmd(1000)">1s</button>
+        <button class="btn-ctrl btn-ctrl-dim"   onclick="sendIntervalCmd(2000)">2s</button>
+        <button class="btn-ctrl btn-ctrl-dim"   onclick="sendIntervalCmd(5000)">5s</button>
+        <button class="btn-ctrl btn-ctrl-dim"   onclick="sendIntervalCmd(10000)">10s</button>
+      </div>
+      <div class="ctrl-note">Sends to: {prefix}/cmd/interval</div>
+    </div>
+
+    <!-- Remote Reset -->
+    <div class="card ctrl-card">
+      <div class="card-label">// Remote Reset</div>
+      <div class="ctrl-icon">🔄</div>
+      <div class="ctrl-status" id="reset-status">STANDBY</div>
+      <div class="ctrl-btn-row">
+        <button class="btn-ctrl btn-ctrl-red" onclick="confirmReset()">RESET ESP32</button>
+      </div>
+      <div class="ctrl-note">Sends to: {prefix}/cmd/reset</div>
+    </div>
+
+    <!-- Alert Config -->
+    <div class="card ctrl-card ctrl-card-wide">
+      <div class="card-label">// Alert Email Configuration</div>
+      <div class="ctrl-email-grid">
+        <div class="conn-field">
+          <label>Alert Email</label>
+          <input id="alert-email" type="email" placeholder="you@example.com" />
+        </div>
+        <div class="conn-field">
+          <label>Min Alert Interval</label>
+          <select id="alert-cooldown">
+            <option value="60">1 min</option>
+            <option value="300" selected>5 min</option>
+            <option value="900">15 min</option>
+            <option value="3600">1 hour</option>
+          </select>
+        </div>
+        <div class="ctrl-toggles">
+          <label class="toggle-wrap"><input type="checkbox" id="alert-toggle-temp"  checked /><span>Temp &gt;75°C</span></label>
+          <label class="toggle-wrap"><input type="checkbox" id="alert-toggle-co2"   checked /><span>CO₂ &gt;1000ppm</span></label>
+          <label class="toggle-wrap"><input type="checkbox" id="alert-toggle-moist" checked /><span>Moisture &lt;25%</span></label>
+          <label class="toggle-wrap"><input type="checkbox" id="alert-toggle-hum"   /><span>Humidity &gt;80%</span></label>
+        </div>
+        <button class="btn btn-connect" style="align-self:end;" onclick="saveAlertConfig()">SAVE CONFIG</button>
+      </div>
+      <div id="email-test-row" style="margin-top:10px;">
+        <button class="btn-mini" onclick="sendTestEmail()">SEND TEST EMAIL</button>
+        <span class="ctrl-note" id="email-status" style="margin-left:10px;"></span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════
+       GAUGES  |  ALERTS  |  SUGGESTIONS
+  ════════════════════════════════════ -->
+  <div class="grid-main">
+    <div class="card">
+      <div class="chart-title">Sensor Health</div>
+      <div class="gauge-svg-wrap" id="gauges-wrap"></div>
+    </div>
+    <div class="card">
+      <div class="chart-title">
+        System Alerts
+        <span id="alert-count" class="alert-count-badge">0 ACTIVE</span>
+      </div>
+      <div id="alerts-container"></div>
+    </div>
+    <div class="card">
+      <div class="chart-title">Smart Suggestions <span>AUTO</span></div>
+      <div id="suggestions-container"></div>
+    </div>
+  </div>
+
+  <!-- NODE REGISTRY TABLE -->
+  <div class="section-row" style="margin-top:20px;">
+    <div class="section-heading">// Node Registry</div>
+    <div class="section-line"></div>
+  </div>
+  <div class="card card-table">
+    <div id="device-table"></div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <span>EcoSentinel v2.0.0</span>
+    <div class="ticker">
+      <div class="ticker-inner" id="ticker-text">ECOSENTINEL  |  INITIALIZING...</div>
+    </div>
+    <span><span class="blink">▌</span> <span id="footer-mode">DEMO</span></span>
+  </footer>
+
+</div><!-- /.wrapper -->
+
+<!-- External Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- EmailJS for browser-side email alerts -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+<script src="script.js"></script>
+</body>
+</html>
