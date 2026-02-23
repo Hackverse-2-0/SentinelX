@@ -1,41 +1,166 @@
-# 🏆 HackVerse - Team Repository
+/*************************************************
+   EcoSentinel – AI Powered Micro-Environment Node
+   Team: SentinelX
+**************************************************/
 
-Welcome to your official team repository! This is your workspace for the duration of the hackathon. Please read the rules and evaluation guidelines carefully before you begin coding.
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "DHT.h"
 
-## Hackathon Rules & Evaluation Process
+/* ------------ OLED CONFIG ------------ */
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_ADDR 0x3C
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-To ensure fairness and track your progress, this hackathon features a strict two-phase evaluation process. **You must push your code to this repository to be evaluated.** Code residing only on your local machines will not be graded.
+/* ------------ PIN CONFIG ------------ */
+#define DHTPIN     4
+#define DHTTYPE    DHT11
+#define GAS_PIN    34
+#define SOIL_PIN   35
+#define BUZZER_PIN 27
 
-### Evaluation 1: The Midpoint Check
-* **Deadline:** 12:15 PM
-* **Requirement:** You must have your initial project structure and foundational code pushed to the `main` branch. 
-* **Purpose:** This check ensures your team is on track, actively collaborating, and has a viable concept in motion. Mentors/Judges will review your commit history and current progress.
+DHT dht(DHTPIN, DHTTYPE);
 
-### Evaluation 2: The Final Submission
-* **Deadline:** 5:00 PM
-* **Requirement:** Your completed project must be fully pushed to the `main` branch. 
-* **Purpose:** This is the final version of your project that will be judged for the hackathon prizes.
+/* ------------ THRESHOLDS ------------ */
+#define TEMP_MIN   20
+#define TEMP_MAX   35
+#define HUM_MIN    40
+#define HUM_MAX    70
+#define GAS_LIMIT  2000
+#define MOIST_MIN  30
+#define MOIST_MAX  70
 
-### STRICT CODE FREEZE POLICY
-**No modifications will be accepted after the Development Time ends at 5:00 PM.** Exactly at the deadline, all team repositories will be **Archived** and converted to **Read-Only**. 
-* Any unpushed local commits will be lost and cannot be submitted.
-* Late submissions, pull requests, or requests to add "just one last fix" will not be accepted under any circumstances.
-* **Tip:** Push your code frequently! Do not wait until the last 5 minutes to push your entire project.
+unsigned long lastSwitch = 0;
+bool showMainPage = true;
 
----
+/* ------------ FUNCTION DECLARATIONS ------------ */
+int getSoilPercent(int raw);
+int calculateHealthScore(float t, float h, int gas, int moist);
+String getStatus(int score);
+void displayMain(float t, float h, int gas, int moist, String status);
+void displayInfo(int score, String status);
 
-## Project Details (Team to fill this out)
+/* ------------ SETUP ------------ */
+void setup() {
+  Serial.begin(9600);
+  dht.begin();
+  pinMode(BUZZER_PIN, OUTPUT);
 
-*Please overwrite the information below with your actual project details before the final evaluation.*
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("OLED Not Found");
+    while (true);
+  }
 
-### Team Name: 
-[Enter your team name]
+  display.clearDisplay();
+  display.setTextColor(WHITE);
+}
 
-### Project Name:
-[Enter your project name]
+/* ------------ LOOP ------------ */
+void loop() {
 
-### Project Description:
-[Write a brief 1-2 paragraph description of what your project does, the problem it solves, and the technologies used.]
+  float temperature = dht.readTemperature();
+  float humidity    = dht.readHumidity();
+  int gasValue      = analogRead(GAS_PIN);
+  int soilRaw       = analogRead(SOIL_PIN);
+  int moisture      = getSoilPercent(soilRaw);
 
-### Setup & Installation Instructions:
-[Provide clear, step-by-step instructions on how the judges can run your project locally. Include any commands needed to install dependencies and start the application.]
+  if (isnan(temperature) || isnan(humidity)) return;
+
+  int healthScore = calculateHealthScore(
+                      temperature,
+                      humidity,
+                      gasValue,
+                      moisture
+                    );
+
+  String status = getStatus(healthScore);
+
+  // Buzzer control
+  if (status == "DANGER")
+    digitalWrite(BUZZER_PIN, HIGH);
+  else
+    digitalWrite(BUZZER_PIN, LOW);
+
+  // Auto page switch every 2 sec
+  if (millis() - lastSwitch > 2000) {
+    showMainPage = !showMainPage;
+    lastSwitch = millis();
+  }
+
+  if (showMainPage)
+    displayMain(temperature, humidity, gasValue, moisture, status);
+  else
+    displayInfo(healthScore, status);
+}
+
+/* ------------ FUNCTIONS ------------ */
+
+int getSoilPercent(int raw) {
+  int percent = map(raw, 4095, 1500, 0, 100);
+  return constrain(percent, 0, 100);
+}
+
+int calculateHealthScore(float t, float h, int gas, int moist) {
+  int score = 0;
+
+  if (t >= TEMP_MIN && t <= TEMP_MAX) score += 25;
+  if (h >= HUM_MIN && h <= HUM_MAX) score += 25;
+  if (gas < GAS_LIMIT) score += 25;
+  if (moist >= MOIST_MIN && moist <= MOIST_MAX) score += 25;
+
+  return score;
+}
+
+String getStatus(int score) {
+  if (score >= 80) return "SAFE";
+  else if (score >= 50) return "WARNING";
+  else return "DANGER";
+}
+
+void displayMain(float t, float h, int gas, int moist, String status) {
+
+  display.clearDisplay();
+  display.setTextSize(1);
+
+  display.setCursor(0,0);
+  display.print("T:");
+  display.print(t,1);
+  display.print("C  H:");
+  display.print(h,0);
+  display.print("%");
+
+  display.setCursor(0,16);
+  display.print("G:");
+  display.print(gas);
+  display.print("  M:");
+  display.print(moist);
+  display.print("%");
+
+  display.setCursor(0,32);
+  display.print("STATUS:");
+  display.print(status);
+
+  display.display();
+}
+
+void displayInfo(int score, String status) {
+
+  display.clearDisplay();
+  display.setTextSize(1);
+
+  display.setCursor(0,0);
+  display.print("HEALTH SCORE:");
+  display.print(score);
+
+  display.setCursor(0,20);
+  if (status == "SAFE")
+    display.print("ACTION: NONE");
+  else if (status == "WARNING")
+    display.print("ACTION: CHECK");
+  else
+    display.print("ACTION: IMMEDIATE!");
+
+  display.display();
+}
